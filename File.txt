@@ -1,0 +1,3 @@
+a =			" /*hui*/			 a\r\nb"        /*asd;lfka;sldkf;laskdflk;asjdf//alskjdf;lkajdsf***** lksjdf;lkasjdf;lk
+asdfasdfasdfasdf*/boba
+
