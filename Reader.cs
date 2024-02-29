@@ -10,8 +10,6 @@ namespace CLexer
     {
         private StreamReader reader;
 
-        private HashSet<char> validEscapeCharacters = new HashSet<char> { 'r', 'n', 't' };
-
         bool firstWhiteSpace = true;
 
 
@@ -34,9 +32,6 @@ namespace CLexer
                     #region Initial State
                     case ReaderState.InitialState:
                         {
-                            if (String.IsNullOrWhiteSpace(nextSymbol[0].ToString()))
-                                continue;
-
                             switch (nextSymbol[0])
                             {
                                 case '/':
@@ -117,7 +112,7 @@ namespace CLexer
                             {
                                 case '\\':
                                     {
-                                        state = ReaderState.EscapeCharacter;
+                                        state = ReaderState.EscapeCharacter; 
                                         return nextSymbol[0];
                                     }
                                 case '\"':
@@ -140,22 +135,14 @@ namespace CLexer
                                         return nextSymbol[0];
                                     }
                             }
-                            break;
                         }
                     #endregion
 
                     #region escaping character
                     case ReaderState.EscapeCharacter:
                         {
-                            if (validEscapeCharacters.Contains(nextSymbol[0]))
-                            {
                                 state = ReaderState.StringLiteral;
                                 return nextSymbol[0];
-                            }
-                            else
-                            {
-                                throw new Exception($"invalid escape character \\{nextSymbol[0]}");
-                            }
                         }
                     #endregion
 
@@ -188,9 +175,9 @@ namespace CLexer
             MultiLineComment,
             InitialState,
             StringLiteral,
-            EscapeCharacter,
             PossibleEndLine,
-            WhiteSpace
+            WhiteSpace,
+            EscapeCharacter
         }
     }
 

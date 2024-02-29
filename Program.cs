@@ -1,4 +1,5 @@
 ﻿using CLexer;
+using CLexer.Exceptions;
 using System.Globalization;
 using System.Xml;
 
@@ -9,7 +10,7 @@ while (true)
     {
         Console.WriteLine(lexer.NextToken());
     }
-    catch (EndOfStreamException e ) 
+    catch (EndOfStreamException) 
     {
         Console.WriteLine("\nend\n");
         return;
@@ -60,6 +61,9 @@ public class Lexer
 
     public Token NextToken()
     {
+        while (IsWhiteSpace(nextCharacter))
+            nextCharacter = reader.NextCharacter();
+
         while (true)
         {
             switch (state)
@@ -71,7 +75,7 @@ public class Lexer
                         {
                             throw new NotImplementedException();
                         }
-                        else if (punctuators.Contains(nextCharacter.ToString()))
+                        else if (IsPunctuator(nextCharacter.ToString()))
                         {
                             state = LexerState.Punctuator;
                         }
@@ -79,9 +83,22 @@ public class Lexer
                         {
                             state = LexerState.Encoding_Prefix;
                         }
-                        else if (IsLetter(nextCharacter) || nextCharacter == '_')
+                        else if ((IsLetter(nextCharacter) && !IsEncodingPrefix(nextCharacter))
+                            || nextCharacter == '_')
                         {
                             state = LexerState.Identifier_Or_Keyword;
+                        }
+                        else if (IsEncodingPrefix(nextCharacter))
+                        {
+                            state = LexerState.Encoding_Prefix;
+                        }
+                        else if (nextCharacter == '"')
+                        {
+                            state = LexerState.String_Literal_Begin;
+                        }
+                        else if (nextCharacter == '\'')
+                        {
+                            state = LexerState.Char_Constant_Begin;
                         }
                         break;
                     }
@@ -90,12 +107,12 @@ public class Lexer
                 #region Recognition of identifier or keyword
                 case LexerState.Identifier_Or_Keyword:
                     {
-                        if (IsLetter(nextCharacter) || IsDigit(nextCharacter) || nextCharacter == '_' )
+                        if (IsAlphaNumeric(nextCharacter) || nextCharacter == '_' )
                         {
                             break;
                         }
 
-                        if (keywords.Contains(value))
+                        if (IsKeyWordLike(value))
                         {
                             possibleTokenType = TokenType.keyword;
                             return GetToken();
@@ -115,16 +132,16 @@ public class Lexer
                 #region Recognition of punctuator
                 case LexerState.Punctuator:
                     {
-                        if (!punctuators.Contains(value + nextCharacter))
+                        if (!IsPunctuator(value + nextCharacter))
                         {
                             possibleTokenType = TokenType.punctuator;
                             return GetToken();
                         }
 
-                        if (punctuators.Contains(nextCharacter.ToString()))
+                        if (IsPunctuator(nextCharacter.ToString()))
                             break;
 
-                        if (punctuators.Contains(value))
+                        if (IsPunctuator(value))
                         {
                             possibleTokenType = TokenType.punctuator;
                             return GetToken();
@@ -138,9 +155,127 @@ public class Lexer
                             throw new KeyNotFoundException($"неправильный пунктуатор: {value}");
                         }
                     }
+                #endregion
+
+                #region Encoding prefix handling
+                case LexerState.Encoding_Prefix:
+                    {
+                        if (value == "u" && nextCharacter == '8')
+                            break;
+                        else if (nextCharacter == '\'')
+                        {
+                            if (value == "L")
+                            {
+                                state = LexerState.Char_Constant_Begin;
+                                break;
+                            }
+                            else
+                            {
+                                throw new InvalidEncodingPrefixBeforeCharConstant
+                                    ($"Ожидалось: L. Получено:{value}");
+                            }
+                        }
+
+                        if (IsAlphaNumeric(nextCharacter) || nextCharacter == '_')
+                        {
+                            state = LexerState.Identifier_Or_Keyword;
+                            break;
+                        }
+                        
+                        if (nextCharacter == '"')
+                        {
+                            state = LexerState.String_Literal_Begin; 
+                            break;
+                        }
+
+                        throw new Exception($"Неожиданный символ {nextCharacter}");
+                    }
+                #endregion
+
+                #region Recognition of char constant
+                case LexerState.Char_Constant_Begin:
+                    {
+                        if (nextCharacter == '\'')
+                            throw new EmptyCharacterConstantException();
+
+                        state = LexerState.Char_Constant_Mid;
+                        break;
+                    }
+                #endregion
+
+                #region Recognition of the possible escape sequence and closing of constant
+                case LexerState.Char_Constant_Mid:
+                    {
+                        if (value.Last() == '\\')
+                        {
+                            if (!ValidEscapeSequence(nextCharacter))
+                                throw new InvalidEscpeSequenceException();
+                            else if (nextCharacter == '\'')
+                                throw new ForbiddenSymbolInCharacterConstantException($@"запрещенный символ: {nextCharacter}");
+
+                            // получаем символ идущий за эскейп последовательностью
+                            value += nextCharacter;
+                            nextCharacter = reader.NextCharacter();
+                        }
+
+                        if (nextCharacter == '\'')
+                        {
+                            state = LexerState.Valid_Char_Constant;
+                            break;
+                        }
+                        else
+                        {
+                            throw new CharacterConstantTooLongException();
+                        }
+                    }
+                #endregion
+
+                #region Finishing recognition of char constant
+                case LexerState.Valid_Char_Constant:
+                    {
+                        if (IsPunctuator(nextCharacter.ToString()) || IsWhiteSpace(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+
+                        throw new Exception($"неожиданный символ после символьной константы: {nextCharacter}." +
+                            $"Ожидался пунктуатор или пробел");
+                    }
+                #endregion
+
+                #region Recognition of string literal
+                case LexerState.String_Literal_Begin:
+                    {
+                        if (nextCharacter == '\\')
+                        {
+                            value += nextCharacter;
+                            nextCharacter = reader.NextCharacter();
+                            if (!ValidEscapeSequence(nextCharacter))
+                                throw new InvalidEscpeSequenceException();
+                        }
+                        else if (nextCharacter == '\"')
+                        {
+                            state = LexerState.Valid_String_Literal; 
+                        }
+
+                        break;
+                    }
+                #endregion
+
+                #region Recognition of trailing symbols of string literal
+                case LexerState.Valid_String_Literal:
+                    {
+                        if (IsPunctuator(nextCharacter.ToString()) || IsWhiteSpace(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.string_literal;
+                            return GetToken();
+                        }
+                        else
+                            throw new Exception($"неожиданный символ после строкового литерала: {nextCharacter}." +
+                            $"Ожидался пунктуатор или пробел");
+                    }
                     #endregion
-
-
             }
 
 
@@ -231,6 +366,11 @@ public class Lexer
         return null;
     }
 
+    private bool ValidEscapeSequence(char nextCharacter)
+    {
+        return escapeSequences.Contains(nextCharacter);
+    }
+
     bool IsWhiteSpace(char ch)
     {
         return string.IsNullOrWhiteSpace(ch.ToString());
@@ -238,6 +378,21 @@ public class Lexer
     private bool IsKeyWordLike(string identifier)
     {
         return keywords.Contains(identifier);
+    }
+
+    private bool IsPunctuator(string identifier)
+    {
+        return punctuators.Contains(identifier);
+    }
+
+    private bool IsEncodingPrefix(char symbol)
+    {
+        return encodingPrefixes.Contains(symbol);
+    }
+
+    private bool IsAlphaNumeric(char symmbol)
+    {
+        return IsLetter(symmbol) || IsDigit(symmbol);
     }
 
     private bool IsLetter(char symbol)
@@ -273,6 +428,12 @@ public class Lexer
             "unsigned", "void", "volatile", "while", "_Alignas",
             "_Alignof", "_Atomic", "_Bool", "_Complex", "_Generic",
             "_Imaginary", "_Noreturn", "_Static_assert", "_Thread_local"
+        };
+
+    HashSet<char> escapeSequences = new HashSet<char>
+        {
+            'a', 'b', 'f', 'n', 'r', 't', 'v',
+            '\'', '\"', '\\', '?'
         };
 
     #endregion

@@ -1,4 +1,5 @@
+aboba u8"  \'"
 if(aboba == hui)
 	printf(huinya);
-else
+else 
 	aboba = hui
