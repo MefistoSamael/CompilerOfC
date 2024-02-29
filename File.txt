@@ -1,4 +1,4 @@
-aboba u8"  \'"
+aboba u8"  \'" 123llu L'a' 25.99 .99 1.99 2e+57 .3e-57
 if(aboba == hui)
 	printf(huinya);
 else 

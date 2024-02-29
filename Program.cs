@@ -1,4 +1,5 @@
 ﻿using CLexer;
+using CLexer.AlarmExceptions;
 using CLexer.Exceptions;
 using System.Globalization;
 using System.Xml;
@@ -73,7 +74,15 @@ public class Lexer
                     {
                         if (IsDigit(nextCharacter))
                         {
-                            throw new NotImplementedException();
+                            var digit = nextCharacter - '0';
+                            if (digit >= 1 && digit <= 9)
+                                state = LexerState.Valid_Decimal;
+                            else if (digit == 0)
+                                state = LexerState.Zero;
+                        }
+                        else if (nextCharacter == '.')
+                        {
+                            state = LexerState.Wait_Number;
                         }
                         else if (IsPunctuator(nextCharacter.ToString()))
                         {
@@ -233,7 +242,7 @@ public class Lexer
                 #region Finishing recognition of char constant
                 case LexerState.Valid_Char_Constant:
                     {
-                        if (IsPunctuator(nextCharacter.ToString()) || IsWhiteSpace(nextCharacter))
+                        if (IsEndOfLexem(nextCharacter))
                         {
                             possibleTokenType = TokenType.constant;
                             return GetToken();
@@ -266,7 +275,7 @@ public class Lexer
                 #region Recognition of trailing symbols of string literal
                 case LexerState.Valid_String_Literal:
                     {
-                        if (IsPunctuator(nextCharacter.ToString()) || IsWhiteSpace(nextCharacter))
+                        if (IsEndOfLexem(nextCharacter))
                         {
                             possibleTokenType = TokenType.string_literal;
                             return GetToken();
@@ -274,6 +283,219 @@ public class Lexer
                         else
                             throw new Exception($"неожиданный символ после строкового литерала: {nextCharacter}." +
                             $"Ожидался пунктуатор или пробел");
+                    }
+                #endregion
+
+                #region Waiting decimal number
+                case LexerState.Wait_Number:
+                    {
+                        if (!IsDigit(nextCharacter))
+                        {
+                            state = LexerState.Punctuator;
+                        }
+
+                        var digit = nextCharacter - '0';
+                        if (digit >= 0 && digit <= 9)
+                        {
+                            state = LexerState.Valid_Float;
+                            break;
+                        }
+
+                        throw new Exception("что то пошло не так");
+                    }
+                #endregion
+
+                #region Recognition of decimal numbers
+                case LexerState.Valid_Decimal:
+                    {
+                        if (IsDigit(nextCharacter))
+                        {
+                            var digit = nextCharacter - '0';
+                            if (digit <= 9 && digit >= 0)
+                                break;
+                        }
+                        else if (IsIntegerSuffix(nextCharacter))
+                        {
+                            state = LexerState.Integer_Suffix; 
+                            break;
+                        }
+                        else if (nextCharacter == '.')
+                        {
+                            state = LexerState.Valid_Float;
+                            break;
+                        }
+                        else if (nextCharacter == 'e' || nextCharacter == 'E')
+                        {
+                            state = LexerState.Invalid_Exponent;
+                            break;
+                        }
+                        else if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else
+                        {
+                            throw new InvalidDecimalNumberException();
+                        }
+
+                        throw new UnreachableCodeReachedException();
+                    }
+                #endregion
+
+                #region Recognition of integer suffix
+                case LexerState.Integer_Suffix:
+                    {
+                        if (IsIntegerSuffix(nextCharacter))
+                        {
+                            if (value.Last() != nextCharacter)
+                            {
+                                break;
+                            }
+                            else if (value.Last() == nextCharacter && (nextCharacter == 'l' || nextCharacter == 'L'))
+                            {
+                                state = LexerState.Repeated_Integer_Suffix;
+                                break;
+                            }
+                            else
+                            {
+                                throw new IntegerSuffixInvalidCombinationException();
+                            }
+                                
+                        }
+                        else if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else
+                        {
+                            throw new Exception("неожиданный символ после константы");
+                        }
+
+                        throw new UnreachableCodeReachedException();
+                    }
+                #endregion
+
+                #region Recognition of repeated suffixes (like ll)
+                case LexerState.Repeated_Integer_Suffix:
+                    {
+                        if (IsIntegerSuffix(nextCharacter))
+                        {
+                            if (value.Last() != nextCharacter)
+                            {
+                                break;
+                            }
+                            else
+                            {
+                                throw new IntegerSuffixInvalidCombinationException();
+                            }
+
+                        }
+                        else if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else
+                        {
+                            throw new Exception("неожиданный символ после константы");
+                        }
+
+                        throw new UnreachableCodeReachedException();
+                    }
+                #endregion
+
+                #region Recognition of valid float numbers
+                case LexerState.Valid_Float:
+                    {
+                        if (IsDigit(nextCharacter))
+                            break;
+                        else if (nextCharacter == 'e' || nextCharacter == 'E')
+                        {
+                            state = LexerState.Invalid_Exponent;
+                            break;
+                        }
+                        else if (IsFloatingSuffix(nextCharacter))
+                        {
+                            state = LexerState.Float_Suffix;
+                        }
+                        else if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else
+                        {
+                            throw new InvalidDecimalNumberException();
+                        }
+
+                        throw new UnreachableCodeReachedException();
+                    }
+                #endregion
+
+                #region Recognition of exponent. Invalid exponent step
+                case LexerState.Invalid_Exponent:
+                    {
+                        if (IsDigit(nextCharacter))
+                        {
+                            state = LexerState.Valid_Exponent;
+                            break;
+                        }
+                        else if (nextCharacter == '+' || nextCharacter == '-')
+                        {
+                            state = LexerState.Exponent_Sign;
+                            break;
+                        }
+                        else
+                        {
+                            throw new InvalidDecimalNumberException();
+                        }
+
+                        throw new UnreachableCodeReachedException();
+                    }
+                #endregion
+
+                #region Recognition of exponent. Valid exponent step
+                case LexerState.Valid_Exponent:
+                    {
+                        if (IsDigit(nextCharacter))
+                        {
+                            break;
+                        }
+                        else if (IsFloatingSuffix(nextCharacter))
+                        {
+                            state = LexerState.Float_Suffix;
+                            break;
+                        }
+                        else if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else
+                        {
+                            throw new InvalidDecimalNumberException();
+                        }
+
+                        throw new UnreachableCodeReachedException();
+                    }
+                #endregion
+
+                #region Recognition of exponent. Exponent sign step
+                case LexerState.Exponent_Sign:
+                    {
+                        if (IsDigit(nextCharacter))
+                        {
+                            state = LexerState.Valid_Exponent;
+                            break;
+                        }
+                        else
+                        {
+                            throw new InvalidDecimalNumberException();
+                        }
+
+                        throw new UnreachableCodeReachedException();
                     }
                     #endregion
             }
@@ -371,6 +593,11 @@ public class Lexer
         return escapeSequences.Contains(nextCharacter);
     }
 
+    private bool IsEndOfLexem(char nextCharacter)
+    {
+        return IsWhiteSpace(nextCharacter) || IsPunctuator(nextCharacter.ToString());
+    }
+
     bool IsWhiteSpace(char ch)
     {
         return string.IsNullOrWhiteSpace(ch.ToString());
@@ -380,9 +607,19 @@ public class Lexer
         return keywords.Contains(identifier);
     }
 
+    private bool IsFloatingSuffix(char nextCharacter)
+    {
+        return floatSuffixes.Contains(nextCharacter);
+    }
+
     private bool IsPunctuator(string identifier)
     {
         return punctuators.Contains(identifier);
+    }
+
+    private bool IsIntegerSuffix(char nextCharacter)
+    {
+        return integerSuffixes.Contains(nextCharacter);
     }
 
     private bool IsEncodingPrefix(char symbol)
@@ -430,6 +667,16 @@ public class Lexer
             "_Imaginary", "_Noreturn", "_Static_assert", "_Thread_local"
         };
 
+    private HashSet<char> integerSuffixes = new HashSet<char>
+    {
+            'u', 'U', 'l', 'L'
+    };
+
+    private HashSet<char> floatSuffixes = new HashSet<char>
+    {
+            'f', 'F', 'l', 'L'
+    };
+
     HashSet<char> escapeSequences = new HashSet<char>
         {
             'a', 'b', 'f', 'n', 'r', 't', 'v',
@@ -448,6 +695,7 @@ public class Lexer
         Wait_Number,
         Valid_Decimal,
         Integer_Suffix,
+        Repeated_Integer_Suffix,
         Valid_Float,
         Float_Suffix,
         Invalid_Exponent,
