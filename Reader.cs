@@ -34,8 +34,8 @@ namespace CLexer
                     #region Initial State
                     case ReaderState.InitialState:
                         {
-                            if (!String.IsNullOrWhiteSpace(nextSymbol[0].ToString()))
-                                firstWhiteSpace = true;
+                            if (String.IsNullOrWhiteSpace(nextSymbol[0].ToString()))
+                                continue;
 
                             switch (nextSymbol[0])
                             {
@@ -56,20 +56,6 @@ namespace CLexer
                                     }
                                 default:
                                     {
-                                        // если пробел встречен первый раз - вернуть его
-                                        // иначе - ничего не возвращать
-                                        if (String.IsNullOrWhiteSpace(nextSymbol[0].ToString()))
-                                        {
-                                            if (firstWhiteSpace)
-                                            {
-                                                firstWhiteSpace = false;
-                                            }
-                                            else
-                                            {
-                                                break;
-                                            }
-                                        }
-
                                         return nextSymbol[0];
                                     }
                             }
@@ -193,7 +179,7 @@ namespace CLexer
             if (state != ReaderState.InitialState)
                 throw new Exception("End of file at bad place");
             else
-                throw new EndOfStreamException();
+                return '\0';
         }
 
         private enum ReaderState

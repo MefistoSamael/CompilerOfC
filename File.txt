@@ -1,3 +1,4 @@
-do123 =			" /*hui*/			 a\r\nb"        /*asd;lfka;sldkf;laskdflk;asjdf//alskjdf;lkajdsf***** lksjdf;lkasjdf;lk
-asdfasdfasdfasdf*/boba
-
+if(aboba == hui)
+	printf(huinya);
+else
+	aboba = hui

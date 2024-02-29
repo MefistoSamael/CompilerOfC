@@ -3,8 +3,18 @@ using System.Globalization;
 using System.Xml;
 
 Lexer lexer = new Lexer("File.txt");
-
-Console.WriteLine(lexer.NextToken());
+while (true)
+{
+    try
+    {
+        Console.WriteLine(lexer.NextToken());
+    }
+    catch (EndOfStreamException e ) 
+    {
+        Console.WriteLine("\nend\n");
+        return;
+    }
+}
 
 public class Token
 {
@@ -20,7 +30,7 @@ public class Token
 
     public override string ToString()
     {
-        return $"Type: {Type}\nValue: {Value}";
+        return $"{Value} --- {Type}";
     }
 }
 
@@ -38,13 +48,13 @@ public class Lexer
 
     private string possibleOperator = string.Empty;
 
+    private bool endOfFile = false;
 
     private Reader reader;
 
     public Lexer(string FilePath)
     {
-        string path = Path.Combine(Directory.GetParent(Directory.GetCurrentDirectory())!.Parent!.Parent!.FullName, FilePath);
-        reader = new Reader(path);
+        reader = new Reader(FilePath);
         nextCharacter = reader.NextCharacter();
     }
 
@@ -69,7 +79,7 @@ public class Lexer
                         {
                             state = LexerState.Encoding_Prefix;
                         }
-                        else if (IsLetter(nextCharacter) || nextCharacter == '_') 
+                        else if (IsLetter(nextCharacter) || nextCharacter == '_')
                         {
                             state = LexerState.Identifier_Or_Keyword;
                         }
@@ -105,6 +115,12 @@ public class Lexer
                 #region Recognition of punctuator
                 case LexerState.Punctuator:
                     {
+                        if (!punctuators.Contains(value + nextCharacter))
+                        {
+                            possibleTokenType = TokenType.punctuator;
+                            return GetToken();
+                        }
+
                         if (punctuators.Contains(nextCharacter.ToString()))
                             break;
 
@@ -126,6 +142,11 @@ public class Lexer
 
 
             }
+
+
+            if (nextCharacter == '\0')
+                throw new EndOfStreamException();
+
             value += nextCharacter;
             nextCharacter = reader.NextCharacter();
         }
@@ -188,6 +209,9 @@ public class Lexer
     /// </remarks>
     private string? SimillarPunctuator(string value)
     {
+        if (value.Length < 3)
+            return null;
+
         foreach (var punctuator in punctuators)
         {
             if (Math.Abs(punctuator.Length - value.Length) > 1)
@@ -207,6 +231,10 @@ public class Lexer
         return null;
     }
 
+    bool IsWhiteSpace(char ch)
+    {
+        return string.IsNullOrWhiteSpace(ch.ToString());
+    }
     private bool IsKeyWordLike(string identifier)
     {
         return keywords.Contains(identifier);
