@@ -1,17 +1,10 @@
-﻿Reader reader = new Reader("File.txt");
+﻿using CLexer;
+using System.Globalization;
+using System.Xml;
 
-while (true)
-{
-    try
-    {
-        Console.Write(reader.NextCharacter());
-    }
-    catch (EndOfStreamException ex)
-    {
-        Console.WriteLine("\nEnf of file");
-        break;
-    }
-}
+Lexer lexer = new Lexer("File.txt");
+
+Console.WriteLine(lexer.NextToken());
 
 public class Token
 {
@@ -19,234 +12,277 @@ public class Token
 
     public string Value;
 
+    public Token(TokenType type, string value)
+    {
+        Type = type;
+        Value = value;
+    }
+
+    public override string ToString()
+    {
+        return $"Type: {Type}\nValue: {Value}";
+    }
 }
 
 public class Lexer 
 {
-    public char character;
+    private LexerState state = LexerState.InitialState;
 
-    public int currentLine;
-
-    public char nextCharacter;
+    private char nextCharacter;
 
     private TokenType possibleTokenType;
-    private string possibleValue = string.Empty;
 
-    private StreamReader reader;
+    private string value = string.Empty;
+
+    private string possibleKeyWord = string.Empty;
+
+    private string possibleOperator = string.Empty;
+
+
+    private Reader reader;
 
     public Lexer(string FilePath)
     {
         string path = Path.Combine(Directory.GetParent(Directory.GetCurrentDirectory())!.Parent!.Parent!.FullName, FilePath);
-        reader = new StreamReader(path);
+        reader = new Reader(path);
+        nextCharacter = reader.NextCharacter();
     }
 
     public Token NextToken()
     {
-        throw new NotImplementedException();
-    }
-}
-
-public class Reader
-{
-    private StreamReader reader;
-
-    private enum ReaderState 
-    {
-        PossibleComment,
-        MultiLineComment,
-        InitialState,
-        StringLiteral,
-        EscapeCharacter,
-        PossibleEndLine,
-        WhiteSpace
-    }
-
-    private HashSet<char> validEscapeCharacters = new HashSet<char> { 'r', 'n', 't' };
-
-    bool firstWhiteSpace = true;
-
-
-    private ReaderState state = ReaderState.InitialState;
-
-    public Reader(string FilePath)
-    {
-        string path = Path.Combine(Directory.GetParent(Directory.GetCurrentDirectory())!.Parent!.Parent!.FullName, FilePath);
-        reader = new StreamReader(path);
-    }
-
-    public char NextCharacter()
-    {
-        char[] nextSymbol = new char[1];
-
-        while (reader.Read(nextSymbol, 0, 1) != 0)
+        while (true)
         {
             switch (state)
             {
                 #region Initial State
-                case ReaderState.InitialState:
-                {
-                    if(!String.IsNullOrWhiteSpace(nextSymbol[0].ToString()))
-                        firstWhiteSpace = true;
-
-                    switch (nextSymbol[0]) 
+                case LexerState.InitialState:
                     {
-                        case '/':
+                        if (IsDigit(nextCharacter))
                         {
-                            state = ReaderState.PossibleComment;
-                            break;
+                            throw new NotImplementedException();
                         }
-                        case '\"':
+                        else if (punctuators.Contains(nextCharacter.ToString()))
                         {
-                            state = ReaderState.StringLiteral;
-                            return nextSymbol[0];
+                            state = LexerState.Punctuator;
                         }
-                        case '\'':
+                        else if (encodingPrefixes.Contains(nextCharacter))
                         {
-                            state = ReaderState.StringLiteral;
-                            return nextSymbol[0];
+                            state = LexerState.Encoding_Prefix;
                         }
-                        default:
+                        else if (IsLetter(nextCharacter) || nextCharacter == '_') 
                         {
-                            // если пробел встречен первый раз - вернуть его
-                            // иначе - ничего не возвращать
-                            if (String.IsNullOrWhiteSpace(nextSymbol[0].ToString()))
-                            {
-                                if (firstWhiteSpace)
-                                {
-                                    firstWhiteSpace = false;
-                                }
-                                else
-                                {
-                                    break;
-                                }
-                            }
-
-                            return nextSymbol[0];
+                            state = LexerState.Identifier_Or_Keyword;
                         }
+                        break;
                     }
-                    break;
-                }
                 #endregion
 
-                #region Possible Comment
-                case ReaderState.PossibleComment:
-                {
-                    switch (nextSymbol[0])
+                #region Recognition of identifier or keyword
+                case LexerState.Identifier_Or_Keyword:
                     {
-                        case '/':
-                        {
-                            state = ReaderState.InitialState;
-                            reader.ReadLine();
-                            break;
-                        }
-                        case '*':
-                        {
-                            state = ReaderState.MultiLineComment;
-                            break;
-                        }
-                        default:
-                        {
-                            throw new Exception($"Invalid token /{nextSymbol[0]}");
-                        }
-                    }
-                    break;
-                }
-                #endregion
-
-                #region Multi line comment
-                case ReaderState.MultiLineComment:
-                {
-                    switch (nextSymbol[0])
-                    {
-                        case '*':
-                        {
-                            reader.Read(nextSymbol, 0, 1);
-
-                            if (nextSymbol[0] == '/')
-                                state = ReaderState.InitialState;
-                            break;
-                        }
-                        default:
+                        if (IsLetter(nextCharacter) || IsDigit(nextCharacter) || nextCharacter == '_' )
                         {
                             break;
                         }
+
+                        if (keywords.Contains(value))
+                        {
+                            possibleTokenType = TokenType.keyword;
+                            return GetToken();
+                        }
+
+                        string? simillarKeyWord = SimillarKeyWord(value);
+                        if (simillarKeyWord is not null)
+                            throw new TypoException($"возможно вы имелли ввиду {simillarKeyWord}. Вы ввели  {value}");
+                        else
+                        {
+                            possibleTokenType = TokenType.identifier;
+                            return GetToken();
+                        }
                     }
-                    break;
-                }
                 #endregion
 
-                #region string or char literal
-                case ReaderState.StringLiteral:
-                {
-                    switch (nextSymbol[0])
+                #region Recognition of punctuator
+                case LexerState.Punctuator:
                     {
-                        case '\\':
-                        {
-                            state = ReaderState.EscapeCharacter;
-                            return nextSymbol[0];
-                        }
-                        case '\"':
-                        {
-                            state = ReaderState.InitialState;
-                            return nextSymbol[0];
-                        }
-                        case '\'':
-                        {
-                            state = ReaderState.InitialState;
-                            return nextSymbol[0];
-                        }
-                        case '\r':
-                        {
-                            state = ReaderState.PossibleEndLine;
-                            return nextSymbol[0];
-                        }
-                        default:
-                        {
-                            return nextSymbol[0]; 
-                        }
-                    }
-                    break;
-                }
-                #endregion
+                        if (punctuators.Contains(nextCharacter.ToString()))
+                            break;
 
-                #region escaping character
-                case ReaderState.EscapeCharacter:
-                {
-                    if (validEscapeCharacters.Contains(nextSymbol[0]))
-                    {
-                        state = ReaderState.StringLiteral;
-                        return nextSymbol[0];
-                    }
-                    else
-                    {
-                        throw new Exception($"invalid escape character \\{nextSymbol[0]}");
-                    }
-                }
-                #endregion
+                        if (punctuators.Contains(value))
+                        {
+                            possibleTokenType = TokenType.punctuator;
+                            return GetToken();
+                        }
 
-                #region Possible end of line
-                case ReaderState.PossibleEndLine:
-                {
-                    if (nextSymbol[0] == '\n')
-                    {
-                        throw new Exception("End of line in string literal");
+                        string? simillarPunctuator = SimillarPunctuator(value);
+                        if (simillarPunctuator is not null)
+                            throw new TypoException($"возможно вы имелли ввиду {simillarPunctuator}. Вы ввели  {value}");
+                        else
+                        {
+                            throw new KeyNotFoundException($"неправильный пунктуатор: {value}");
+                        }
                     }
-                    else
-                    {
-                        state = ReaderState.StringLiteral;
-                        return nextSymbol[0];
-                    }
-                }
-                #endregion
+                    #endregion
+
+
             }
+            value += nextCharacter;
+            nextCharacter = reader.NextCharacter();
+        }
+        
+    }
+
+    /// <summary>
+    /// Возвращает токен полученный из лексеммы
+    /// </summary>
+    /// <returns>Токен, полученный в результате анализа</returns>
+    /// <remarks>
+    /// Обнуляет состояние и переменную содержимиого. Возвращает полученный токен
+    /// </remarks>
+    private Token GetToken()
+    {
+        var returnValue = value;
+        var returnType = possibleTokenType;
+
+        state = LexerState.InitialState;
+        value = string.Empty;
+        return new Token(returnType, returnValue);
+    }
+
+    /// <summary>
+    /// Проверяет похожа ли переданная строка на ключевое слово
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns>Похожее ключевое слово, если есть. Иначе - null</returns>
+    /// <remarks>
+    /// Строик похожи - если отличаются одним символом (не учтен случай разных символов в конце)
+    /// </remarks>
+    private string? SimillarKeyWord(string value)
+    {
+        foreach (var word in keywords) 
+        {
+            if (Math.Abs(word.Length - value.Length) > 1)
+                continue;
+
+            int differenceAmount = 0;
+
+            int minLenght = word.Length < value.Length ? word.Length : value.Length;
+            for (int i = 0; i < minLenght; i++)
+                if (word[i] != value[i])
+                    differenceAmount++;
+
+            if (differenceAmount <= 1)
+                return word;
         }
 
-        if (state != ReaderState.InitialState)
-            throw new Exception("End of file at bad place");
-        else
-            throw new EndOfStreamException();
+        return null;
+    }
+
+    /// <summary>
+    /// Проверяет похожа ли переданная строка на пунктуатор
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns>Похожий пунктуатор, если есть. Иначе - null</returns>
+    /// <remarks>
+    /// Строик похожи - если отличаются одним символом (не учтен случай разных символов в конце)
+    /// </remarks>
+    private string? SimillarPunctuator(string value)
+    {
+        foreach (var punctuator in punctuators)
+        {
+            if (Math.Abs(punctuator.Length - value.Length) > 1)
+                continue;
+
+            int differenceAmount = 0;
+
+            int minLenght = punctuator.Length < value.Length ? punctuator.Length : value.Length;
+            for (int i = 0; i < minLenght; i++)
+                if (punctuator[i] != value[i])
+                    differenceAmount++;
+
+            if (differenceAmount <= 1)
+                return punctuator;
+        }
+
+        return null;
+    }
+
+    private bool IsKeyWordLike(string identifier)
+    {
+        return keywords.Contains(identifier);
+    }
+
+    private bool IsLetter(char symbol)
+    {
+        return char.IsAsciiLetter(symbol);
+    }
+
+    private bool IsDigit(char symbol)
+    {
+        return char.IsAsciiDigit(symbol);
+    }
+    #region Constants
+    private HashSet<char> encodingPrefixes = new HashSet<char> { 'u', 'U', 'L' };
+
+    private HashSet<string> punctuators = new HashSet<string>
+        {
+            "[", "]", "(", ")", "{", "}", ".", "->",
+            "++", "--", "&", "*", "+", "-", "~", "!",
+            "/", "%", "<<", ">>", "<", ">", "<=", ">=",
+            "==", "!=", "^", "|", "&&", "||", "?", ":",
+            ";", "...", "=", "*=", "/=", "%=", "+=", "-=",
+            "<<=", ">>=", "&=", "^=", "|=", ",", "#", "##",
+            "<:", ":>", "<%", "%>", "%:", "%:%:"
+        };
+
+    private HashSet<string> keywords = new HashSet<string>
+        {
+            "auto", "break", "case", "char", "const", "continue",
+            "default", "do", "double", "else", "enum", "extern",
+            "float", "for", "goto", "if", "inline", "int", "long",
+            "register", "restrict", "return", "short", "signed",
+            "sizeof", "static", "struct", "switch", "typedef", "union",
+            "unsigned", "void", "volatile", "while", "_Alignas",
+            "_Alignof", "_Atomic", "_Bool", "_Complex", "_Generic",
+            "_Imaginary", "_Noreturn", "_Static_assert", "_Thread_local"
+        };
+
+    #endregion
+
+    private enum LexerState
+    {
+        InitialState,
+        Zero,
+        Invalid_Binary,
+        Valid_Binary,
+        Valid_Octal,
+        Wait_Number,
+        Valid_Decimal,
+        Integer_Suffix,
+        Valid_Float,
+        Float_Suffix,
+        Invalid_Exponent,
+        Valid_Exponent,
+        Exponent_Sign,
+        Invalid_Hex,
+        Wait_Hex_Number,
+        Valid_Hex,
+        Valid_Hex_Float,
+        Invalid_Binary_Exponent,
+        Valid_Binary_Exponent,
+        Binary_Exponent_Sign,
+        Encoding_Prefix,
+        Char_Constant_Begin,
+        String_Literal_Begin,
+        Char_Constant_Mid,
+        String_Literal_Mid,
+        Valid_Char_Constant,
+        Valid_String_Literal,
+        Identifier_Or_Keyword,
+        Punctuator
     }
 }
+
 
 public enum TokenType
 {
