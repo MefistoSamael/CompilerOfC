@@ -10,6 +10,9 @@ namespace CLexer
     {
         private StreamReader reader;
 
+        char current;
+
+        char next;
 
         private ReaderState state = ReaderState.InitialState;
 
@@ -17,6 +20,13 @@ namespace CLexer
         {
             string path = Path.Combine(Directory.GetParent(Directory.GetCurrentDirectory())!.Parent!.Parent!.FullName, FilePath);
             reader = new StreamReader(path);
+
+
+            char[] nextSymbol = new char[1];
+
+            reader.Read(nextSymbol, 0, 1);
+
+            current = nextSymbol[0];
         }
 
         public char NextCharacter()
@@ -25,31 +35,32 @@ namespace CLexer
 
             while (reader.Read(nextSymbol, 0, 1) != 0)
             {
+                next = nextSymbol[0];
+
                 switch (state)
                 {
                     #region Initial State
                     case ReaderState.InitialState:
                         {
-                            switch (nextSymbol[0])
+                            switch (current)
                             {
                                 case '/':
                                     {
+                                        if (next != '/' && next != '*')
+                                        {
+                                            return DoReturn();
+                                        }
                                         state = ReaderState.PossibleComment;
                                         break;
                                     }
                                 case '\"':
                                     {
                                         state = ReaderState.StringLiteral;
-                                        return nextSymbol[0];
-                                    }
-                                case '\'':
-                                    {
-                                        state = ReaderState.StringLiteral;
-                                        return nextSymbol[0];
+                                        var val = current; current = next; return val;
                                     }
                                 default:
                                     {
-                                        return nextSymbol[0];
+                                        return DoReturn();
                                     }
                             }
                             break;
@@ -59,7 +70,7 @@ namespace CLexer
                     #region Possible Comment
                     case ReaderState.PossibleComment:
                         {
-                            switch (nextSymbol[0])
+                            switch (current)
                             {
                                 case '/':
                                     {
@@ -75,7 +86,7 @@ namespace CLexer
                                 default:
                                     {
                                         state = ReaderState.InitialState;
-                                        return nextSymbol[0];
+                                        return DoReturn();
                                     }
                             }
                             break;
@@ -85,14 +96,15 @@ namespace CLexer
                     #region Multi line comment
                     case ReaderState.MultiLineComment:
                         {
-                            switch (nextSymbol[0])
+                            switch (current)
                             {
                                 case '*':
                                     {
-                                        reader.Read(nextSymbol, 0, 1);
-
-                                        if (nextSymbol[0] == '/')
+                                        if (next == '/')
                                             state = ReaderState.InitialState;
+                                        
+                                        // надо чтобы убрать символ комментария
+                                        next = ' ';
                                         break;
                                     }
                                 default:
@@ -107,26 +119,26 @@ namespace CLexer
                     #region string or char literal
                     case ReaderState.StringLiteral:
                         {
-                            switch (nextSymbol[0])
+                            switch (current)
                             {
                                 case '\\':
                                     {
                                         state = ReaderState.EscapeCharacter; 
-                                        return nextSymbol[0];
+                                        return DoReturn();
                                     }
                                 case '\"':
                                     {
                                         state = ReaderState.InitialState;
-                                        return nextSymbol[0];
+                                        return DoReturn();
                                     }
                                 case '\r':
                                     {
                                         state = ReaderState.PossibleEndLine;
-                                        return nextSymbol[0];
+                                        return DoReturn();
                                     }
                                 default:
                                     {
-                                        return nextSymbol[0];
+                                        return DoReturn();
                                     }
                             }
                         }
@@ -136,25 +148,27 @@ namespace CLexer
                     case ReaderState.EscapeCharacter:
                         {
                                 state = ReaderState.StringLiteral;
-                                return nextSymbol[0];
+                                return DoReturn();
                         }
                     #endregion
 
                     #region Possible end of line
                     case ReaderState.PossibleEndLine:
                         {
-                            if (nextSymbol[0] == '\n')
+                            if (current == '\n')
                             {
                                 throw new Exception("End of line in string literal");
                             }
                             else
                             {
                                 state = ReaderState.StringLiteral;
-                                return nextSymbol[0];
+                                return DoReturn();
                             }
                         }
                         #endregion
                 }
+
+                current = next;
             }
 
             if (state != ReaderState.InitialState)
@@ -172,6 +186,13 @@ namespace CLexer
             PossibleEndLine,
             WhiteSpace,
             EscapeCharacter
+        }
+
+        private char DoReturn()
+        {
+            var val = current;
+            current = next;
+            return val;
         }
     }
 

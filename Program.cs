@@ -449,6 +449,7 @@ public class Lexer
                         else if (IsFloatingSuffix(nextCharacter))
                         {
                             state = LexerState.Float_Suffix;
+                            break;
                         }
                         else if (IsEndOfLexem(nextCharacter))
                         {

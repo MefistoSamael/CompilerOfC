@@ -1,40 +1,55 @@
-   
-// C Program to check for prime number using Simple Approach 
-#include <stdio.h> 
+#include <stdio.h>
 
+int main() {
+    int whileCounter = 0;
+    while (whileCounter < 5) {
+        printf("while loop: %d\n", whileCounter);
+        whileCounter++;
+    }
 
+    for (int forCounter = 0; forCounter < 5; forCounter++) {
+        printf("For loop: %d\n", forCounter);
+    }
 
-void checkPrime(int N) 
-{ 
+    int doWhileCounter = 0;
+    do {
+        printf("do-while loop: %d\n", doWhileCounter);
+        doWhileCounter++;
+    } while (doWhileCounter < 5);
 
-	int flag = 1; 
+    int num = 10;
+    if (num > 0) {
+        printf("The number is positive\n");
+    } else if (num < 0) {
+        printf("The number is negative\n");
+    } else {
+        printf("The number is zero\n");
+    }
 
+    char grade = 'B';
+    switch (grade) {
+        case 'A':
+            printf("Excellent!\n");
+            break;
+        case 'B':
+            printf("Good!\n");
+            break;
+        case 'C':
+            printf("Satisfactory\n");
+            break;
+        default:
+            printf("Unknown grade\n");
+    }
 
-	for (int i = 2; i <= N / 2; i++) { 
+    for (int i = 0; i < 10; i++) {
+        if (i == 5) {
+            break;  // Exit the loop when i is 5
+        }
+        if (i % 2 == 0) {
+            continue; // Skip even values of i
+        }
+        printf("Current value of i: %d\n", i);
+    }
 
-		// if N is perfectly divisible by i 
-		// flag is set to 0 i.e false 
-		if (N % i == 0) { 
-			flag = 0; 
-			break; 
-		} 
-	} 
-
-	if (flag) { 
-		printf("The number %d is a Prime Number\n", N); 
-	} 
-	else { 
-		printf("The number %d is not a Prime Number\n", N); 
-	} 
-
-	return; 
-} 
-
-// driver code 
-int main() 
-{ 
-	int N = 546; 
-
-	checkPrime(N); 
-
-	return 0;
+    return 0;
+}
