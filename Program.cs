@@ -36,6 +36,21 @@ public class Token
     }
 }
 
+public class TokenWithTypo : Token
+{
+    string message;
+    public TokenWithTypo(TokenType type, string value, string message) : base(type, value)
+    {
+        this.message = message;
+    }
+
+    public override string ToString()
+    {
+        return $"Внимание! Возможно произошла опечатка: \n{message}\n{Value} --- {Type}";
+    }
+}
+
+
 public class Lexer 
 {
     private LexerState state = LexerState.InitialState;
@@ -46,13 +61,9 @@ public class Lexer
 
     private string value = string.Empty;
 
-    private string possibleKeyWord = string.Empty;
-
-    private string possibleOperator = string.Empty;
-
-    private bool endOfFile = false;
-
     private Reader reader;
+
+    public List<String> typos = new List<string>();
 
     public Lexer(string FilePath)
     {
@@ -74,15 +85,19 @@ public class Lexer
                     {
                         if (IsDigit(nextCharacter))
                         {
-                            var digit = nextCharacter - '0';
-                            if (digit >= 1 && digit <= 9)
-                                state = LexerState.Valid_Decimal;
-                            else if (digit == 0)
+                            if (nextCharacter == '0')
                                 state = LexerState.Zero;
+                            else
+                                state = LexerState.Valid_Decimal;
+                                
                         }
                         else if (nextCharacter == '.')
                         {
                             state = LexerState.Wait_Number;
+                        }
+                        else if (nextCharacter == '+' || nextCharacter == '-')
+                        {
+                            state = LexerState.Number_Sign;
                         }
                         else if (IsPunctuator(nextCharacter.ToString()))
                         {
@@ -129,7 +144,10 @@ public class Lexer
 
                         string? simillarKeyWord = SimillarKeyWord(value);
                         if (simillarKeyWord is not null)
-                            throw new TypoException($"возможно вы имелли ввиду {simillarKeyWord}. Вы ввели  {value}");
+                        {
+                            possibleTokenType = TokenType.identifier;
+                            return GetToken($"возможно вы хотели ввести: {simillarKeyWord} вы ввели: {value}");
+                        }
                         else
                         {
                             possibleTokenType = TokenType.identifier;
@@ -158,7 +176,10 @@ public class Lexer
 
                         string? simillarPunctuator = SimillarPunctuator(value);
                         if (simillarPunctuator is not null)
-                            throw new TypoException($"возможно вы имелли ввиду {simillarPunctuator}. Вы ввели  {value}");
+                        {
+                            possibleTokenType = TokenType.identifier;
+                            return GetToken($"возможно вы хотели ввести: {simillarPunctuator} вы ввели: {value}");
+                        }
                         else
                         {
                             throw new KeyNotFoundException($"неправильный пунктуатор: {value}");
@@ -336,7 +357,7 @@ public class Lexer
                         }
                         else
                         {
-                            throw new InvalidDecimalNumberException();
+                            throw new InvalidNumberException();
                         }
 
                         throw new UnreachableCodeReachedException();
@@ -427,7 +448,7 @@ public class Lexer
                         }
                         else
                         {
-                            throw new InvalidDecimalNumberException();
+                            throw new InvalidNumberException();
                         }
 
                         throw new UnreachableCodeReachedException();
@@ -449,7 +470,7 @@ public class Lexer
                         }
                         else
                         {
-                            throw new InvalidDecimalNumberException();
+                            throw new InvalidNumberException();
                         }
 
                         throw new UnreachableCodeReachedException();
@@ -475,7 +496,7 @@ public class Lexer
                         }
                         else
                         {
-                            throw new InvalidDecimalNumberException();
+                            throw new InvalidNumberException();
                         }
 
                         throw new UnreachableCodeReachedException();
@@ -492,10 +513,271 @@ public class Lexer
                         }
                         else
                         {
-                            throw new InvalidDecimalNumberException();
+                            throw new InvalidNumberException();
                         }
 
                         throw new UnreachableCodeReachedException();
+                    }
+                #endregion
+
+                #region Rercognition of sign
+                case LexerState.Number_Sign:
+                    {
+                        if (IsDigit(nextCharacter))
+                        {
+                            if (nextCharacter == '0') 
+                            {
+                                state = LexerState.Zero;
+                                break;
+                            }
+                            else
+                            {
+                                state = LexerState.Valid_Decimal;
+                                break;
+                            }
+                        }
+                        else if (nextCharacter == '.')
+                        {
+                            state = LexerState.Wait_Number;
+                            break;
+                        }
+                        else if (IsPunctuator(value + nextCharacter))
+                        {
+                            state = LexerState.Punctuator;
+                            break;
+                        }
+                        else
+                        {
+                            throw new InvalidSymbolAfterSignException(); 
+                        }
+                    }
+                #endregion
+
+                #region Recognition of 0
+                case LexerState.Zero:
+                    {
+                        if (IsDigit(nextCharacter))
+                        {
+                            state = LexerState.Valid_Decimal;
+                            break;
+                        }
+                        else if (nextCharacter == '.')
+                        {
+                            state = LexerState.Valid_Float;
+                            break;
+                        }
+                        else if (nextCharacter == 'b' || nextCharacter == 'B')
+                        {
+                            state = LexerState.Invalid_Binary; 
+                            break;   
+                        }
+                        else if (nextCharacter == 'x' || nextCharacter == 'X')
+                        {
+                            state = LexerState.Invalid_Hex;
+                            break;
+                        }
+                        else if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else
+                        {
+                            throw new InvalidNumberException();
+                        }
+                    }
+                #endregion
+
+                #region Recognition of binary number. Step invalid number
+                case LexerState.Invalid_Binary:
+                    {
+                        if (nextCharacter == '0' || nextCharacter == '1')
+                        {
+                            state = LexerState.Valid_Binary; 
+                            break;
+                        }
+                        else
+                        {
+                            throw new InvalidNumberException();
+                        }
+                    }
+                #endregion
+
+                #region Recognition of binary number. Step valid number
+                case LexerState.Valid_Binary:
+                    {
+                        if (nextCharacter == '0' || nextCharacter == '1')
+                        {
+                            break;
+                        }
+                        else if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else if (IsIntegerSuffix(nextCharacter))
+                        {
+                            state = LexerState.Integer_Suffix;
+                            break;
+                        }
+                        else
+                            throw new InvalidNumberException();
+                    }
+                #endregion
+
+                #region Recognition of Hex numbers. Step invalid number
+                case LexerState.Invalid_Hex:
+                    {
+                        if (nextCharacter == '.')
+                        {
+                            state = LexerState.Wait_Hex_Number;
+                            break;
+                        }
+                        else if (IsHexHumber(nextCharacter))
+                        {
+                            state = LexerState.Valid_Hex;
+                            break;
+                        }
+                        else
+                            throw new InvalidNumberException();
+                    }
+                #endregion
+
+                #region Waiting for the number after .
+                case LexerState.Wait_Hex_Number:
+                    {
+                        if (IsHexHumber(nextCharacter))
+                        {
+                            state = LexerState.Valid_Hex_Float;
+                            break;
+                        }
+                        else
+                            throw new InvalidNumberException();
+                    }
+                #endregion
+
+                #region Recognition of Hex numbers. Step valid number
+                case LexerState.Valid_Hex:
+                    {
+                        if (IsHexHumber(nextCharacter))
+                        {
+                            break;
+                        }
+                        else if (IsIntegerSuffix(nextCharacter))
+                        {
+                            state = LexerState.Integer_Suffix;
+                            break;
+                        }
+                        else if (nextCharacter == '.')
+                        {
+                            state = LexerState.Valid_Hex_Float;
+                            break;
+                        }
+                        else if (nextCharacter == 'p' || nextCharacter == 'P')
+                        {
+                            state = LexerState.Invalid_Binary_Exponent;
+                            break;
+                        }
+                        else if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else
+                            throw new InvalidNumberException();
+                    }
+                #endregion
+
+                #region Recognition of Hex numbers. Step valid floating number
+                case LexerState.Valid_Hex_Float:
+                    {
+                        if (IsHexHumber(nextCharacter))
+                        {
+                            break;
+                        }
+                        else if (IsFloatingSuffix(nextCharacter))
+                        {
+                            state = LexerState.Float_Suffix;
+                            break;
+                        }
+                        else if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else if (nextCharacter == 'p' || nextCharacter == 'P')
+                        {
+                            state = LexerState.Invalid_Binary_Exponent;
+                            break;
+                        }
+                        else 
+                            throw new InvalidNumberException();
+                    }
+                #endregion
+
+                #region Recognition of Hex numbers. Step invalid binary exponent
+                case LexerState.Invalid_Binary_Exponent:
+                    {
+                        if (IsDigit(nextCharacter))
+                        {
+                            state = LexerState.Valid_Binary_Exponent;
+                            break;
+                        }
+                        else if (nextCharacter == '+' || nextCharacter == '-')
+                        {
+                            state = LexerState.Binary_Exponent_Sign;
+                            break;
+                        }
+                        else
+                            throw new InvalidNumberException();
+                    }
+                #endregion
+
+                #region Recognition of Hex numbers. Step valid binary exponent
+                case LexerState.Valid_Binary_Exponent:
+                    {
+                        if (IsDigit(nextCharacter))
+                        {
+                            break;
+                        }
+                        else if (IsFloatingSuffix(nextCharacter))
+                        {
+                            state = LexerState.Float_Suffix;
+                            break;
+                        }
+                        else if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else
+                            throw new InvalidNumberException();
+                    }
+                #endregion
+
+                #region Recognition of Hex numbers. Step binary exponent sign
+                case LexerState.Binary_Exponent_Sign:
+                    {
+                        if (IsDigit(nextCharacter))
+                        {
+                            state = LexerState.Valid_Binary_Exponent;
+                            break;
+                        }
+                        else
+                            throw new InvalidNumberException();
+                    }
+                #endregion
+
+                #region Recognition of floating suffix
+                case LexerState.Float_Suffix:
+                    {
+                        if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.constant;
+                            return GetToken();
+                        }
+                        else
+                            throw new InvalidNumberException();
                     }
                     #endregion
             }
@@ -528,6 +810,23 @@ public class Lexer
     }
 
     /// <summary>
+    /// Возвращает токен полученный из лексеммы
+    /// </summary>
+    /// <returns>Токен, полученный в результате анализа</returns>
+    /// <remarks>
+    /// Обнуляет состояние и переменную содержимиого. Возвращает полученный токен
+    /// </remarks>
+    private Token GetToken(string message)
+    {
+        var returnValue = value;
+        var returnType = possibleTokenType;
+
+        state = LexerState.InitialState;
+        value = string.Empty;
+        return new TokenWithTypo(returnType, returnValue, message);
+    }
+
+    /// <summary>
     /// Проверяет похожа ли переданная строка на ключевое слово
     /// </summary>
     /// <param name="value"></param>
@@ -537,6 +836,8 @@ public class Lexer
     /// </remarks>
     private string? SimillarKeyWord(string value)
     {
+        if (value.Length <= 2)
+            return null;
         foreach (var word in keywords) 
         {
             if (Math.Abs(word.Length - value.Length) > 1)
@@ -637,6 +938,14 @@ public class Lexer
         return char.IsAsciiLetter(symbol);
     }
 
+    private bool IsHexHumber(char nextCharacter)
+    {
+        return
+            (nextCharacter >= '0' && nextCharacter <= '9') ||
+            (nextCharacter >= 'a' && nextCharacter <= 'f') ||
+            (nextCharacter >= 'A' && nextCharacter <= 'F');
+    }
+
     private bool IsDigit(char symbol)
     {
         return char.IsAsciiDigit(symbol);
@@ -716,7 +1025,8 @@ public class Lexer
         Valid_Char_Constant,
         Valid_String_Literal,
         Identifier_Or_Keyword,
-        Punctuator
+        Punctuator,
+        Number_Sign
     }
 }
 
@@ -729,5 +1039,6 @@ public enum TokenType
     string_literal,
     punctuator,
     header_name,
-    c_operator
+    c_operator,
+    identifier_with_typo
 }

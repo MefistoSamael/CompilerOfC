@@ -6,16 +6,16 @@ using System.Threading.Tasks;
 
 namespace CLexer.Exceptions
 {
-    public class InvalidDecimalNumberException : Exception
+    public class InvalidNumberException : Exception
     {
-        public InvalidDecimalNumberException()
+        public InvalidNumberException()
         { }
 
-        public InvalidDecimalNumberException(string message)
+        public InvalidNumberException(string message)
             : base(message)
         { }
 
-        public InvalidDecimalNumberException(string message, Exception innerException)
+        public InvalidNumberException(string message, Exception innerException)
             : base(message, innerException)
         { }
     }

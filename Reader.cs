@@ -10,8 +10,6 @@ namespace CLexer
     {
         private StreamReader reader;
 
-        bool firstWhiteSpace = true;
-
 
         private ReaderState state = ReaderState.InitialState;
 
@@ -76,7 +74,8 @@ namespace CLexer
                                     }
                                 default:
                                     {
-                                        throw new Exception($"Invalid token /{nextSymbol[0]}");
+                                        state = ReaderState.InitialState;
+                                        return nextSymbol[0];
                                     }
                             }
                             break;
@@ -116,11 +115,6 @@ namespace CLexer
                                         return nextSymbol[0];
                                     }
                                 case '\"':
-                                    {
-                                        state = ReaderState.InitialState;
-                                        return nextSymbol[0];
-                                    }
-                                case '\'':
                                     {
                                         state = ReaderState.InitialState;
                                         return nextSymbol[0];
