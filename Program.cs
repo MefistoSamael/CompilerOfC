@@ -2,6 +2,7 @@
 using CLexer.AlarmExceptions;
 using CLexer.Exceptions;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Xml;
 
 Lexer lexer = new Lexer("File.txt");
@@ -98,6 +99,14 @@ public class Lexer
                         else if (nextCharacter == '+' || nextCharacter == '-')
                         {
                             state = LexerState.Number_Sign;
+                        }
+                        else if (nextCharacter == '#')
+                        {
+                            state = LexerState.Preproccessor_Directives;
+                        }
+                        else if (nextCharacter == '<')
+                        {
+                            state = LexerState.Header_LowerThan_Begin;
                         }
                         else if (IsPunctuator(nextCharacter.ToString()))
                         {
@@ -779,6 +788,52 @@ public class Lexer
                         else
                             throw new InvalidNumberException();
                     }
+                #endregion
+
+                #region Recognition of preproccessor directives
+                case LexerState.Preproccessor_Directives:
+                    { 
+                        if (IsLetter(nextCharacter))
+                                break;
+                        else if (IsEndOfLexem(nextCharacter) && IsPreprocessorDirective(value))
+                        {
+                            possibleTokenType = TokenType.preprocessor_directive;
+                            return GetToken();
+                        }
+                        else 
+                            throw new InvalidPreprocessorDirectiveException();
+                    }
+                #endregion
+
+                #region Recognition of header name with <. Begining
+                case LexerState.Header_LowerThan_Begin:
+                    {
+                        if (IsPunctuator(value + nextCharacter))
+                        {
+                            state = LexerState.Punctuator;
+                            break;
+                        }
+                        else if (nextCharacter == '>')
+                        {
+                            state = LexerState.Header_LowerThan_End;
+                            break;
+                        }
+                        else
+                            break;
+                    }
+                #endregion
+
+                #region Recognition of header name with <. Ending
+                case LexerState.Header_LowerThan_End:
+                    {
+                        if (IsEndOfLexem(nextCharacter))
+                        {
+                            possibleTokenType = TokenType.header_name;
+                            return GetToken();
+                        }
+                        else
+                            throw new InvalidHeaderNameException();
+                    }
                     #endregion
             }
 
@@ -908,6 +963,11 @@ public class Lexer
         return keywords.Contains(identifier);
     }
 
+    private bool IsPreprocessorDirective(string identifier)
+    {
+        return preprocessorDirectives.Contains(identifier);
+    }
+
     private bool IsFloatingSuffix(char nextCharacter)
     {
         return floatSuffixes.Contains(nextCharacter);
@@ -915,7 +975,14 @@ public class Lexer
 
     private bool IsPunctuator(string identifier)
     {
-        return punctuators.Contains(identifier);
+        return punctuators.Contains(RemoveWhitespace(identifier));
+    }
+
+    private string RemoveWhitespace(string input)
+    {
+        return new string(input.ToCharArray()
+            .Where(c => !Char.IsWhiteSpace(c))
+            .ToArray());
     }
 
     private bool IsIntegerSuffix(char nextCharacter)
@@ -976,6 +1043,12 @@ public class Lexer
             "_Imaginary", "_Noreturn", "_Static_assert", "_Thread_local"
         };
 
+    private HashSet<string> preprocessorDirectives = new HashSet<string>
+        {
+            "#include", "#define", "#error", "#if", "#elif", "#endif",
+            "#else", "#ifdef", "#ifndef", "#line", "#undef"
+        };
+
     private HashSet<char> integerSuffixes = new HashSet<char>
     {
             'u', 'U', 'l', 'L'
@@ -1026,7 +1099,12 @@ public class Lexer
         Valid_String_Literal,
         Identifier_Or_Keyword,
         Punctuator,
-        Number_Sign
+        Number_Sign,
+        Preproccessor_Directives,
+        Header_Quoted_Begin,
+        Header_Quoted_End,
+        Header_LowerThan_Begin,
+        Header_LowerThan_End
     }
 }
 
@@ -1040,5 +1118,6 @@ public enum TokenType
     punctuator,
     header_name,
     c_operator,
-    identifier_with_typo
+    identifier_with_typo,
+    preprocessor_directive,
 }
